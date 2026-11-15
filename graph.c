@@ -30,8 +30,8 @@ int W = 800;
 int H = 800;
 
 float zoom = 1.0f;
-int scr_x = 0;
-int scr_y = 0;
+float scr_x = 0.0f;
+float scr_y = 0.0f;
 
 // 0:draw function. 1:convergence check. (ex:fractal)
 int mode = 0;
@@ -41,6 +41,7 @@ char cmd[CMD_LEN];
 int op_stk[STK_LEN];
 int res_stk[STK_LEN];
 float res_val_stk[STK_LEN];
+int stk_n = 0;
 
 char *input(const char *msg) {
   printf("%s", msg);
@@ -167,6 +168,7 @@ int special_operation(const char *sp, int *stk_n, int *op_n, int *number_flag) {
 }
 
 int fill_stk_w_cmd() {
+  stk_n = 0;
 
   int number_temp = 0;
   int number_temp_pow = 0;
@@ -179,7 +181,6 @@ int fill_stk_w_cmd() {
 
   int i = 0;
   // it means "(res,res_val) stk next" and "op stk next"
-  int stk_n = 0;
   int op_n = 0;
   char c;
   while (i < CMD_LEN && (c = cmd[i]) != '\n' && c != '\0') {
@@ -280,16 +281,26 @@ int main(int argc, char *argv[]) {
 
   Shader shader = LoadShader(0, "gpu.frag");
 
+  int zoom_loc = GetShaderLocation(shader, "zoom");
+  int screen_pos_loc = GetShaderLocation(shader, "scr_pos");
+  int screen_size_loc = GetShaderLocation(shader, "scr_size");
+  int main_stack_loc = GetShaderLocation(shader, "main_stack");
+  int value_stack_loc = GetShaderLocation(shader, "value_stack");
+  int stack_length_loc = GetShaderLocation(shader, "stack_length");
+
   while (!WindowShouldClose()) {
+    W = GetScreenWidth();
+    H = GetScreenHeight();
+
     float for_zoom =
         IsKeyDown(KEY_EQUAL) * ZOOM_UNIT + IsKeyDown(KEY_MINUS) / ZOOM_UNIT;
     zoom *= (for_zoom != 0) ? for_zoom : 1.0f;
-    scr_x +=
-        IsKeyDown(KEY_RIGHT) * MOVE_UNIT + IsKeyDown(KEY_LEFT) * MOVE_UNIT * -1;
+    scr_x += (IsKeyDown(KEY_RIGHT) - IsKeyDown(KEY_LEFT)) * MOVE_UNIT /
+             (zoom * 100.0f);
     scr_y +=
-        IsKeyDown(KEY_UP) * MOVE_UNIT + IsKeyDown(KEY_DOWN) * MOVE_UNIT * -1;
+        (IsKeyDown(KEY_UP) - IsKeyDown(KEY_DOWN)) * MOVE_UNIT / (zoom * 100.0f);
 
-    if (IsKeyDown(KEY_SPACE)) {
+    if (IsKeyPressed(KEY_SPACE)) {
       input("Please enter new function to draw!\n>");
       int fill_fail = fill_stk_w_cmd();
       if (fill_fail) {
@@ -300,6 +311,17 @@ int main(int argc, char *argv[]) {
     BeginDrawing();
 
     ClearBackground(WHITE);
+
+    Vector2 scr_size = {(float)W, (float)H};
+    Vector2 scr_pos = {scr_x, scr_y};
+    SetShaderValue(shader, zoom_loc, &zoom, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, screen_pos_loc, &scr_pos, SHADER_UNIFORM_VEC2);
+    SetShaderValue(shader, screen_size_loc, &scr_size, SHADER_UNIFORM_VEC2);
+    SetShaderValueV(shader, main_stack_loc, &res_stk, SHADER_UNIFORM_INT,
+                    stk_n);
+    SetShaderValueV(shader, value_stack_loc, &res_val_stk, SHADER_UNIFORM_FLOAT,
+                    stk_n);
+    SetShaderValue(shader, stack_length_loc, &stk_n, SHADER_UNIFORM_INT);
 
     BeginShaderMode(shader);
 
